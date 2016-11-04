@@ -1,0 +1,4 @@
+[root]
+name = "mini_interpreter"
+version = "0.1.0"
+
