@@ -7,5 +7,4 @@ return
 .F main 0
 push int 123
 push float 345.12
-push string print2
-call
+call print2

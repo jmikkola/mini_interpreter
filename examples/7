@@ -7,14 +7,12 @@ dup
 
 push int 1
 minus
-push string slow-fib
-call
+call slow-fib
 
 dup_n 1
 push int 2
 minus
-push string slow-fib
-call
+call slow-fib
 
 plus
 return
@@ -24,7 +22,6 @@ push int 1
 return
 
 .F main 0
-push int 35
-push string slow-fib
-call
+push int 20
+call slow-fib
 print

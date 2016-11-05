@@ -88,7 +88,7 @@ enum Command {
     New,
     GetRef,
     SetRef,
-    Call,
+    Call(String),
     Return,
     SysGC,
     SysMemstats,
@@ -152,7 +152,7 @@ fn parse_command(line: String) -> Result<Command, String> {
         "new" => Ok(Command::New),
         "getref" => Ok(Command::GetRef),
         "setref" => Ok(Command::SetRef),
-        "call" => Ok(Command::Call),
+        "call" => Ok(Command::Call(parts[1].to_owned())),
         "return" => Ok(Command::Return),
         "sysgc" => Ok(Command::SysGC),
         "sysmemstats" => Ok(Command::SysMemstats),
@@ -412,9 +412,8 @@ fn interpret(functions: HashMap<String, Function>) {
                 let (_, val_id) = frame.stack.pop().unwrap().must_ref();
                 heap.get_mut(&val_id).unwrap()[field as usize] = value;
             }
-            Command::Call => {
-                let fn_name = frame.stack.pop().unwrap().must_string();
-                let called_f = functions.get(&fn_name).unwrap();
+            Command::Call(ref fn_name) => {
+                let called_f = functions.get(fn_name).unwrap();
                 let mut next_frame = new_frame(pc, f.name.clone());
 
                 for _ in 0..called_f.n_args {

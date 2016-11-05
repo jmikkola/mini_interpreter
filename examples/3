@@ -5,6 +5,5 @@ return
 
 .F main 0
 push int 123
-push string f1
-call
+call f1
 print
