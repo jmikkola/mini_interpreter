@@ -67,6 +67,12 @@ enum Command {
     Times,
     Divide,
     Mod,
+    Eq,
+    Neq,
+    Gt,
+    Gte,
+    Lt,
+    Lte,
     Print,
     MkType,
     New,
@@ -118,6 +124,12 @@ fn parse_command(line: String) -> Result<Command, String> {
         "times" => Ok(Command::Times),
         "divide" => Ok(Command::Divide),
         "mod" => Ok(Command::Mod),
+        "eq" => Ok(Command::Eq),
+        "neq" => Ok(Command::Neq),
+        "gt" => Ok(Command::Gt),
+        "gte" => Ok(Command::Gte),
+        "lt" => Ok(Command::Lt),
+        "lte" => Ok(Command::Lte),
         "print" => Ok(Command::Print),
         "mktype" => Ok(Command::MkType),
         "new" => Ok(Command::New),
@@ -207,6 +219,45 @@ fn math(stack: &mut Vec<Value>, op: MathOp) {
     stack.push(result);
 }
 
+fn compare_equality(stack: &mut Vec<Value>, is_eq: bool) {
+    let right = stack.pop().unwrap();
+    let left = stack.pop().unwrap();
+    stack.push(Value::B(is_eq == (left == right)));
+}
+
+#[derive(PartialEq, Debug)]
+enum Comp {
+    Gt,
+    Gte,
+    Lt,
+    Lte,
+}
+
+fn compare(stack: &mut Vec<Value>, comp: Comp) {
+    let right = stack.pop().unwrap();
+    let left = stack.pop().unwrap();
+    let result = match (left, right) {
+        (Value::I(l), Value::I(r)) => {
+            match comp {
+                Comp::Gt => l > r,
+                Comp::Gte => l >= r,
+                Comp::Lt => l < r,
+                Comp::Lte => l <= r,
+            }
+        }
+        (Value::F(l), Value::F(r)) => {
+            match comp {
+                Comp::Gt => l > r,
+                Comp::Gte => l >= r,
+                Comp::Lt => l < r,
+                Comp::Lte => l <= r,
+            }
+        }
+        _ => panic!("can't apply comparison operator"),
+    };
+    stack.push(Value::B(result));
+}
+
 fn default_value(t: &String) -> Value {
     match t.as_ref() {
         "int" => Value::I(0),
@@ -277,6 +328,24 @@ fn interpret(functions: HashMap<String, Function>) {
             }
             Command::Mod => {
                 math(&mut frame.stack, MathOp::Mod);
+            }
+            Command::Eq => {
+                compare_equality(&mut frame.stack, true);
+            }
+            Command::Neq => {
+                compare_equality(&mut frame.stack, false);
+            }
+            Command::Gt => {
+                compare(&mut frame.stack, Comp::Gt);
+            }
+            Command::Gte => {
+                compare(&mut frame.stack, Comp::Gte);
+            }
+            Command::Lt => {
+                compare(&mut frame.stack, Comp::Lt);
+            }
+            Command::Lte => {
+                compare(&mut frame.stack, Comp::Lte);
             }
             Command::Print => {
                 let top_val = frame.stack.last().unwrap();

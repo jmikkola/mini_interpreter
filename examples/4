@@ -1,0 +1,5 @@
+.F main 0
+push int 123
+push int 456
+gt
+print
