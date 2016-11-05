@@ -69,6 +69,7 @@ enum Command {
     Push(Value),
     Pop,
     Dup,
+    DupN(usize),
     Plus,
     Minus,
     Times,
@@ -104,6 +105,10 @@ fn parse_err<A>(msg: &str) -> Result<A, String> {
     Err(msg.to_owned())
 }
 
+fn parse_int(s: &str) -> Result<i64, String> {
+    s.to_owned().parse().map_err(|_| format!("can't parse {} as int", s))
+}
+
 fn parse_value(parts: &Vec<&str>) -> Result<Value, String> {
     if parts.len() <= 2 {
         return parse_err("push stmt too short");
@@ -128,6 +133,7 @@ fn parse_command(line: String) -> Result<Command, String> {
         "push" => Ok(Command::Push(try!(parse_value(&parts)))),
         "pop" => Ok(Command::Pop),
         "dup" => Ok(Command::Dup),
+        "dup_n" => Ok(Command::DupN(try!(parse_int(parts[1])) as usize)),
         "plus" => Ok(Command::Plus),
         "minus" => Ok(Command::Minus),
         "times" => Ok(Command::Times),
@@ -325,6 +331,11 @@ fn interpret(functions: HashMap<String, Function>) {
                 let top_val = frame.stack.last().unwrap().clone();
                 frame.stack.push(top_val);
             }
+            Command::DupN(n) => {
+                let len = frame.stack.len();
+                let val = frame.stack[len - n - 1].clone();
+                frame.stack.push(val);
+            }
             Command::Plus => {
                 math(&mut frame.stack, MathOp::Plus);
             }
@@ -367,7 +378,7 @@ fn interpret(functions: HashMap<String, Function>) {
                 }
             }
             Command::Print => {
-                let top_val = frame.stack.last().unwrap();
+                let top_val = frame.stack.pop().unwrap();
                 println!("{}", top_val.to_str());
             }
             Command::MkType => {

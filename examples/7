@@ -1,0 +1,30 @@
+.F slow-fib 1
+dup
+push int 2
+lt
+jif ret1
+dup
+
+push int 1
+minus
+push string slow-fib
+call
+
+dup_n 1
+push int 2
+minus
+push string slow-fib
+call
+
+plus
+return
+
+!ret1
+push int 1
+return
+
+.F main 0
+push int 35
+push string slow-fib
+call
+print
