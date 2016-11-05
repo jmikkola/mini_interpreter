@@ -1,3 +1,4 @@
+.F main 0
 push float 9.0
 push float 3.0
 minus

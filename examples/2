@@ -1,3 +1,4 @@
+.F main 0
 push string int
 push string ref
 push int 2
