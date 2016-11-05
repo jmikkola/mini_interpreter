@@ -35,14 +35,21 @@ impl Value {
     fn must_int(&self) -> i64 {
         match *self {
             Value::I(ref i) => *i,
-            _ => panic!("not a string"),
+            _ => panic!("not an int"),
         }
     }
 
     fn must_ref(&self) -> (i64, i64) {
         match *self {
             Value::R(ref t, ref v) => (*t, *v),
-            _ => panic!("not a string"),
+            _ => panic!("not a reference"),
+        }
+    }
+
+    fn must_bool(&self) -> bool {
+        match *self {
+            Value::B(b) => b,
+            _ => panic!("not a boolean"),
         }
     }
 }
@@ -73,6 +80,8 @@ enum Command {
     Gte,
     Lt,
     Lte,
+    Jump(String),
+    JIf(String),
     Print,
     MkType,
     New,
@@ -130,6 +139,8 @@ fn parse_command(line: String) -> Result<Command, String> {
         "gte" => Ok(Command::Gte),
         "lt" => Ok(Command::Lt),
         "lte" => Ok(Command::Lte),
+        "jump" => Ok(Command::Jump(parts[1].to_owned())),
+        "jif" => Ok(Command::JIf(parts[1].to_owned())),
         "print" => Ok(Command::Print),
         "mktype" => Ok(Command::MkType),
         "new" => Ok(Command::New),
@@ -346,6 +357,14 @@ fn interpret(functions: HashMap<String, Function>) {
             }
             Command::Lte => {
                 compare(&mut frame.stack, Comp::Lte);
+            }
+            Command::Jump(ref label) => {
+                pc = *f.names.get(label).unwrap();
+            }
+            Command::JIf(ref label) => {
+                if frame.stack.pop().unwrap().must_bool() {
+                    pc = *f.names.get(label).unwrap();
+                }
             }
             Command::Print => {
                 let top_val = frame.stack.last().unwrap();

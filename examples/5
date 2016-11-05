@@ -1,0 +1,13 @@
+.F main 0
+push int 10
+!top
+dup
+push int 0
+eq
+jif end
+dup
+print
+push int 1
+minus
+jump top
+!end
