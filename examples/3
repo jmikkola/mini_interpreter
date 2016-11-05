@@ -1,0 +1,10 @@
+.F f1 1
+dup
+plus
+return
+
+.F main 0
+push int 123
+push string f1
+call
+print

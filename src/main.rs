@@ -58,6 +58,7 @@ struct Function {
 
 #[derive(PartialEq, Debug, Clone)]
 enum Command {
+    Noop,
     Push(Value),
     Pop,
     Dup,
@@ -71,6 +72,8 @@ enum Command {
     New,
     GetRef,
     SetRef,
+    Call,
+    Return,
     SysGC,
     SysMemstats,
 }
@@ -106,6 +109,7 @@ fn parse_command(line: String) -> Result<Command, String> {
         return parse_err("empty command?");
     }
     match parts[0] {
+        "noop" => Ok(Command::Noop),
         "push" => Ok(Command::Push(try!(parse_value(&parts)))),
         "pop" => Ok(Command::Pop),
         "dup" => Ok(Command::Dup),
@@ -119,6 +123,8 @@ fn parse_command(line: String) -> Result<Command, String> {
         "new" => Ok(Command::New),
         "getref" => Ok(Command::GetRef),
         "setref" => Ok(Command::SetRef),
+        "call" => Ok(Command::Call),
+        "return" => Ok(Command::Return),
         "sysgc" => Ok(Command::SysGC),
         "sysmemstats" => Ok(Command::SysMemstats),
         _ => Err("invalid command: ".to_owned() + line.as_str()),
@@ -217,11 +223,11 @@ fn default_value(t: &String) -> Value {
 struct Frame {
     stack: Vec<Value>,
     locals: Vec<Value>,
-    prev_pc: i64,
     prev_fn_name: String,
+    prev_pc: usize,
 }
 
-fn new_frame(prev_pc: i64, prev_fn_name: String) -> Frame {
+fn new_frame(prev_pc: usize, prev_fn_name: String) -> Frame {
     Frame {
         stack: vec![],
         locals: vec![],
@@ -233,19 +239,20 @@ fn new_frame(prev_pc: i64, prev_fn_name: String) -> Frame {
 fn interpret(functions: HashMap<String, Function>) {
     let mut types = vec![];
 
-    //let mut stack: Vec<Frame> = vec![];
+    let mut stack: Vec<Frame> = vec![];
     let mut frame = new_frame(0, "_init_".to_owned());
 
     let mut heap: HashMap<i64, Vec<Value>> = HashMap::new();
     let mut next_obj_id = 1;
 
-    let f = functions.get(&"main".to_owned()).unwrap();
+    let mut f = functions.get(&"main".to_owned()).unwrap();
     let mut pc = 0;
     while pc < f.commands.len() {
         let cmd = &f.commands[pc];
         pc += 1;
 
         match *cmd {
+            Command::Noop => {}
             Command::Push(ref v) => {
                 frame.stack.push(v.clone());
             }
@@ -305,6 +312,31 @@ fn interpret(functions: HashMap<String, Function>) {
                 let field = frame.stack.pop().unwrap().must_int();
                 let (_, val_id) = frame.stack.pop().unwrap().must_ref();
                 heap.get_mut(&val_id).unwrap()[field as usize] = value;
+            }
+            Command::Call => {
+                let fn_name = frame.stack.pop().unwrap().must_string();
+                let called_f = functions.get(&fn_name).unwrap();
+                let mut next_frame = new_frame(pc, f.name.clone());
+
+                for _ in 0..called_f.n_args {
+                    next_frame.stack.push(frame.stack.pop().unwrap());
+                }
+                // Fix the argument order:
+                next_frame.stack.reverse();
+
+                stack.push(frame);
+                frame = next_frame;
+                f = called_f;
+                pc = 0;
+            }
+            Command::Return => {
+                let return_val = frame.stack.pop().unwrap();
+
+                pc = frame.prev_pc;
+                f = functions.get(&frame.prev_fn_name).unwrap();
+                frame = stack.pop().unwrap();
+
+                frame.stack.push(return_val);
             }
             Command::SysGC => {
                 let mut live_refs = HashSet::new();
