@@ -3,11 +3,12 @@ use std::collections::HashMap;
 
 #[derive(PartialEq, Debug, Clone)]
 enum Value {
-    IntVal(i64),
-    FloatVal(f64),
-    StringVal(String),
-    CharVar(char),
-    BoolVal(bool),
+    I(i64),
+    F(f64),
+    S(String),
+    C(char),
+    B(bool),
+    R(i32, i32),
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -36,12 +37,22 @@ fn read_lines() -> Vec<String> {
         .collect()
 }
 
-fn parse_err<a>(msg: &str) -> Result<a, String> {
+fn parse_err<A>(msg: &str) -> Result<A, String> {
     Err(msg.to_owned())
 }
 
 fn parse_value(parts: &Vec<&str>) -> Result<Value, String> {
-    parse_err("not implemented")
+    if parts.len() <= 2 {
+        return parse_err("push stmt too short");
+    }
+    match parts[1] {
+        "int" => Ok(Value::I(parts[2].to_owned().parse().unwrap())),
+        "float" => Ok(Value::F(parts[2].to_owned().parse().unwrap())),
+        "string" => Ok(Value::S(parts[2].to_owned())),
+        "char" => Ok(Value::C(parts[2].chars().next().unwrap())),
+        "bool" => Ok(Value::B(parts[2].to_owned().parse().unwrap())),
+        _ => parse_err("invalid value"),
+    }
 }
 
 fn parse_command(line: String) -> Result<Command, String> {
@@ -50,13 +61,7 @@ fn parse_command(line: String) -> Result<Command, String> {
         return parse_err("empty command?");
     }
     match parts[0] {
-        "push" => {
-            if parts.len() > 2 {
-                Ok(Command::Push(try!(parse_value(&parts))))
-            } else {
-                parse_err("invalid push statement")
-            }
-        }
+        "push" => Ok(Command::Push(try!(parse_value(&parts)))),
         "pop" => Ok(Command::Pop),
         "dup" => Ok(Command::Dup),
         "plus" => Ok(Command::Plus),
@@ -92,8 +97,9 @@ fn build(lines: Vec<String>) -> Result<(Vec<Command>, HashMap<String, usize>), S
     Ok((commands, names))
 }
 
+// fn interpret(
+
 fn main() {
     let lines = read_lines();
-    println!("{:?}", lines);
     println!("{:?}", build(lines));
 }
