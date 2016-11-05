@@ -1,0 +1,8 @@
+push float 9.0
+push float 3.0
+minus
+push float 2.0
+push float 5.0
+plus
+times
+print

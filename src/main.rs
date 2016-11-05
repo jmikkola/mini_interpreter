@@ -8,7 +8,7 @@ enum Value {
     S(String),
     C(char),
     B(bool),
-    R(i32, i32),
+    R(i64, i64),
 }
 
 impl Value {
@@ -20,6 +20,27 @@ impl Value {
             Value::C(ref c) => format!("{}", c),
             Value::B(ref b) => format!("{}", b),
             Value::R(ref t, ref v) => format!("<{}, {}>", t, v),
+        }
+    }
+
+    fn must_string(&self) -> String {
+        match *self {
+            Value::S(ref s) => s.clone(),
+            _ => panic!("not a string"),
+        }
+    }
+
+    fn must_int(&self) -> i64 {
+        match *self {
+            Value::I(ref i) => *i,
+            _ => panic!("not a string"),
+        }
+    }
+
+    fn must_ref(&self) -> (i64, i64) {
+        match *self {
+            Value::R(ref t, ref v) => (*t, *v),
+            _ => panic!("not a string"),
         }
     }
 }
@@ -110,10 +131,53 @@ fn build(lines: Vec<String>) -> Result<(Vec<Command>, HashMap<String, usize>), S
     Ok((commands, names))
 }
 
+enum MathOp {
+    Plus,
+    Minus,
+    Times,
+    Divide,
+    Mod,
+}
+
+fn math(stack: &mut Vec<Value>, op :MathOp) {
+    let right = stack.pop().unwrap();
+    let left = stack.pop().unwrap();
+    let result = match (left, right) {
+        (Value::I(l), Value::I(r)) => match op {
+            MathOp::Plus => Value::I(l + r),
+            MathOp::Minus => Value::I(l - r),
+            MathOp::Times => Value::I(l * r),
+            MathOp::Divide => Value::I(l / r),
+            MathOp::Mod => Value::I(l % r),
+        },
+        (Value::F(l), Value::F(r)) => match op {
+            MathOp::Plus => Value::F(l + r),
+            MathOp::Minus => Value::F(l - r),
+            MathOp::Times => Value::F(l * r),
+            MathOp::Divide => Value::F(l / r),
+            MathOp::Mod => Value::F(l % r),
+        },
+        _ => panic!("can't apply math operators"),
+    };
+    stack.push(result);
+}
+
+fn default_value(t: &String) -> Value {
+    match t.as_ref() {
+        "int" => Value::I(0),
+        "float" => Value::F(0.),
+        "string" => Value::S(String::new()),
+        "char" => Value::C('\0'),
+        "bool" => Value::B(false),
+        "ref" => Value::R(0, 0),
+        _ => panic!("invalid type"),
+    }
+}
+
 fn interpret(commands: Vec<Command>, names: HashMap<String, usize>) {
     let mut stack: Vec<Value> = vec![];
-//    let mut heap = HashMap::new();
-//    let mut types = vec![];
+    let mut heap: HashMap<i64, Vec<Value>> = HashMap::new();
+    let mut types = vec![];
     let mut next_obj_id = 1;
 
     let mut pc = 0;
@@ -132,21 +196,58 @@ fn interpret(commands: Vec<Command>, names: HashMap<String, usize>) {
                 let top_val = stack.last().unwrap().clone();
                 stack.push(top_val);
             },
-            Command::Plus => {}
-            Command::Minus => {}
-            Command::Times => {}
-            Command::Divide => {}
-            Command::Mod => {}
+            Command::Plus => {
+                math(&mut stack, MathOp::Plus);
+            },
+            Command::Minus => {
+                math(&mut stack, MathOp::Minus);
+            },
+            Command::Times => {
+                math(&mut stack, MathOp::Times);
+            },
+            Command::Divide => {
+                math(&mut stack, MathOp::Divide);
+            },
+            Command::Mod => {
+                math(&mut stack, MathOp::Mod);
+            },
             Command::Print => {
                 let top_val = stack.last().unwrap();
                 println!("{}", top_val.to_str());
-            }
-            Command::MkType => {}
-            Command::New => {}
-            Command::GetRef => {}
-            Command::SetRef => {}
-            Command::SysGC => {}
-            Command::SysMemstats => {}
+            },
+            Command::MkType => {
+                let name = stack.pop().unwrap().must_string();
+                let n_fields = stack.pop().unwrap().must_int();
+                let mut fields = vec![];
+                for _ in 0..n_fields {
+                    fields.push(stack.pop().unwrap().must_string());
+                }
+
+                types.push((name, fields));
+                stack.push(Value::I((types.len() - 1) as i64));
+            },
+            Command::New => {
+                let type_id = stack.pop().unwrap().must_int();
+                let t = &types[type_id as usize];
+                let val_id = next_obj_id;
+                next_obj_id += 1;
+
+                heap.insert(val_id, t.1.iter().map(default_value).collect());
+                stack.push(Value::R(type_id, val_id));
+            },
+            Command::GetRef => {
+                let field = stack.pop().unwrap().must_int();
+                let (_, val_id) = stack.pop().unwrap().must_ref();
+                stack.push(heap[&val_id][field as usize].clone());
+            },
+            Command::SetRef => {
+                let value = stack.pop().unwrap();
+                let field = stack.pop().unwrap().must_int();
+                let (_, val_id) = stack.pop().unwrap().must_ref();
+                heap.get_mut(&val_id).unwrap()[field as usize] = value;
+            },
+            Command::SysGC => {},
+            Command::SysMemstats => {},
         };
     }
 }

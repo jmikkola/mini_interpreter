@@ -1,0 +1,7 @@
+push string int
+push string ref
+push int 2
+push string link
+mktype
+new
+print
