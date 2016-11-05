@@ -1,2 +1,5 @@
 target
 *.bk
+main
+callgrind.out.*
+oprofile_data
