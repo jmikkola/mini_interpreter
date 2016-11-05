@@ -1,5 +1,7 @@
-use std::io::{stdin, BufReader, BufRead};
 use std::collections::HashMap;
+use std::collections::HashSet;
+use std::collections::VecDeque;
+use std::io::{stdin, BufReader, BufRead};
 
 #[derive(PartialEq, Debug, Clone)]
 enum Value {
@@ -139,24 +141,28 @@ enum MathOp {
     Mod,
 }
 
-fn math(stack: &mut Vec<Value>, op :MathOp) {
+fn math(stack: &mut Vec<Value>, op: MathOp) {
     let right = stack.pop().unwrap();
     let left = stack.pop().unwrap();
     let result = match (left, right) {
-        (Value::I(l), Value::I(r)) => match op {
-            MathOp::Plus => Value::I(l + r),
-            MathOp::Minus => Value::I(l - r),
-            MathOp::Times => Value::I(l * r),
-            MathOp::Divide => Value::I(l / r),
-            MathOp::Mod => Value::I(l % r),
-        },
-        (Value::F(l), Value::F(r)) => match op {
-            MathOp::Plus => Value::F(l + r),
-            MathOp::Minus => Value::F(l - r),
-            MathOp::Times => Value::F(l * r),
-            MathOp::Divide => Value::F(l / r),
-            MathOp::Mod => Value::F(l % r),
-        },
+        (Value::I(l), Value::I(r)) => {
+            match op {
+                MathOp::Plus => Value::I(l + r),
+                MathOp::Minus => Value::I(l - r),
+                MathOp::Times => Value::I(l * r),
+                MathOp::Divide => Value::I(l / r),
+                MathOp::Mod => Value::I(l % r),
+            }
+        }
+        (Value::F(l), Value::F(r)) => {
+            match op {
+                MathOp::Plus => Value::F(l + r),
+                MathOp::Minus => Value::F(l - r),
+                MathOp::Times => Value::F(l * r),
+                MathOp::Divide => Value::F(l / r),
+                MathOp::Mod => Value::F(l % r),
+            }
+        }
         _ => panic!("can't apply math operators"),
     };
     stack.push(result);
@@ -188,33 +194,33 @@ fn interpret(commands: Vec<Command>, names: HashMap<String, usize>) {
         match *cmd {
             Command::Push(ref v) => {
                 stack.push(v.clone());
-            },
+            }
             Command::Pop => {
                 stack.pop();
-            },
+            }
             Command::Dup => {
                 let top_val = stack.last().unwrap().clone();
                 stack.push(top_val);
-            },
+            }
             Command::Plus => {
                 math(&mut stack, MathOp::Plus);
-            },
+            }
             Command::Minus => {
                 math(&mut stack, MathOp::Minus);
-            },
+            }
             Command::Times => {
                 math(&mut stack, MathOp::Times);
-            },
+            }
             Command::Divide => {
                 math(&mut stack, MathOp::Divide);
-            },
+            }
             Command::Mod => {
                 math(&mut stack, MathOp::Mod);
-            },
+            }
             Command::Print => {
                 let top_val = stack.last().unwrap();
                 println!("{}", top_val.to_str());
-            },
+            }
             Command::MkType => {
                 let name = stack.pop().unwrap().must_string();
                 let n_fields = stack.pop().unwrap().must_int();
@@ -225,7 +231,7 @@ fn interpret(commands: Vec<Command>, names: HashMap<String, usize>) {
 
                 types.push((name, fields));
                 stack.push(Value::I((types.len() - 1) as i64));
-            },
+            }
             Command::New => {
                 let type_id = stack.pop().unwrap().must_int();
                 let t = &types[type_id as usize];
@@ -234,20 +240,58 @@ fn interpret(commands: Vec<Command>, names: HashMap<String, usize>) {
 
                 heap.insert(val_id, t.1.iter().map(default_value).collect());
                 stack.push(Value::R(type_id, val_id));
-            },
+            }
             Command::GetRef => {
                 let field = stack.pop().unwrap().must_int();
                 let (_, val_id) = stack.pop().unwrap().must_ref();
                 stack.push(heap[&val_id][field as usize].clone());
-            },
+            }
             Command::SetRef => {
                 let value = stack.pop().unwrap();
                 let field = stack.pop().unwrap().must_int();
                 let (_, val_id) = stack.pop().unwrap().must_ref();
                 heap.get_mut(&val_id).unwrap()[field as usize] = value;
-            },
-            Command::SysGC => {},
-            Command::SysMemstats => {},
+            }
+            Command::SysGC => {
+                let mut live_refs = HashSet::new();
+                let mut to_traverse = VecDeque::new();
+
+                // Collect object roots from the stack
+                for item in stack.iter() {
+                    if let Value::R(_, v) = *item {
+                        to_traverse.push_back(v);
+                    }
+                }
+
+                // Traverse to find all live objects
+                while !to_traverse.is_empty() {
+                    let v = to_traverse.pop_back().unwrap();
+                    if !live_refs.contains(&v) {
+                        if let Some(value) = heap.get(&v) {
+                            live_refs.insert(v);
+                            for field in value {
+                                if let Value::R(_, v2) = *field {
+                                    to_traverse.push_back(v2);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Actually free the memory
+                let mut to_remove = vec![];
+                for key in heap.keys() {
+                    if !live_refs.contains(key) {
+                        to_remove.push(key.clone());
+                    }
+                }
+                for key in to_remove {
+                    heap.remove(&key);
+                }
+            }
+            Command::SysMemstats => {
+                println!("{} heap items", heap.len());
+            }
         };
     }
 }

@@ -4,4 +4,10 @@ push int 2
 push string link
 mktype
 new
-print
+sysmemstats
+sysgc
+sysmemstats
+pop
+sysmemstats
+sysgc
+sysmemstats
