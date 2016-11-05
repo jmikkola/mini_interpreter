@@ -11,6 +11,19 @@ enum Value {
     R(i32, i32),
 }
 
+impl Value {
+    fn to_str(&self) -> String {
+        match *self {
+            Value::I(ref i) => format!("{}", i),
+            Value::F(ref f) => format!("{}", f),
+            Value::S(ref s) => s.clone(),
+            Value::C(ref c) => format!("{}", c),
+            Value::B(ref b) => format!("{}", b),
+            Value::R(ref t, ref v) => format!("<{}, {}>", t, v),
+        }
+    }
+}
+
 #[derive(PartialEq, Debug, Clone)]
 enum Command {
     Push(Value),
@@ -97,9 +110,50 @@ fn build(lines: Vec<String>) -> Result<(Vec<Command>, HashMap<String, usize>), S
     Ok((commands, names))
 }
 
-// fn interpret(
+fn interpret(commands: Vec<Command>, names: HashMap<String, usize>) {
+    let mut stack: Vec<Value> = vec![];
+//    let mut heap = HashMap::new();
+//    let mut types = vec![];
+    let mut next_obj_id = 1;
+
+    let mut pc = 0;
+    while pc < commands.len() {
+        let cmd = &commands[pc];
+        pc += 1;
+
+        match *cmd {
+            Command::Push(ref v) => {
+                stack.push(v.clone());
+            },
+            Command::Pop => {
+                stack.pop();
+            },
+            Command::Dup => {
+                let top_val = stack.last().unwrap().clone();
+                stack.push(top_val);
+            },
+            Command::Plus => {}
+            Command::Minus => {}
+            Command::Times => {}
+            Command::Divide => {}
+            Command::Mod => {}
+            Command::Print => {
+                let top_val = stack.last().unwrap();
+                println!("{}", top_val.to_str());
+            }
+            Command::MkType => {}
+            Command::New => {}
+            Command::GetRef => {}
+            Command::SetRef => {}
+            Command::SysGC => {}
+            Command::SysMemstats => {}
+        };
+    }
+}
 
 fn main() {
-    let lines = read_lines();
-    println!("{:?}", build(lines));
+    match build(read_lines()) {
+        Ok((commands, names)) => interpret(commands, names),
+        Err(err) => println!("Error! {}", err),
+    };
 }
