@@ -22,6 +22,6 @@ push int 1
 return
 
 .F main 0
-push int 20
+push int 35
 call slow-fib
 print

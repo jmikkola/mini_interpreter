@@ -55,16 +55,16 @@ impl Value {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-struct Function {
+struct Function<T> {
     name: String,
-    commands: Vec<Command>,
+    commands: Vec<Command<T>>,
     names: HashMap<String, usize>,
     n_args: i32,
     n_locals: i32,
 }
 
 #[derive(PartialEq, Debug, Clone)]
-enum Command {
+enum Command<T> {
     Noop,
     Push(Value),
     Pop,
@@ -81,14 +81,14 @@ enum Command {
     Gte,
     Lt,
     Lte,
-    Jump(String),
-    JIf(String),
+    Jump(T),
+    JIf(T),
     Print,
     MkType,
     New,
     GetRef,
     SetRef,
-    Call(String),
+    Call(T),
     Return,
     SysGC,
     SysMemstats,
@@ -123,7 +123,7 @@ fn parse_value(parts: &Vec<&str>) -> Result<Value, String> {
     }
 }
 
-fn parse_command(line: String) -> Result<Command, String> {
+fn parse_command(line: String) -> Result<Command<String>, String> {
     let parts: Vec<&str> = line.split_whitespace().collect();
     if parts.len() < 1 {
         return parse_err("empty command?");
@@ -160,7 +160,7 @@ fn parse_command(line: String) -> Result<Command, String> {
     }
 }
 
-fn parse_fn(line: String) -> Result<Function, String> {
+fn parse_fn(line: String) -> Result<Function<String>, String> {
     let parts: Vec<&str> = line.split_whitespace().collect();
     if parts.len() != 3 {
         return parse_err("invalid function def");
@@ -175,30 +175,96 @@ fn parse_fn(line: String) -> Result<Function, String> {
     })
 }
 
-fn build(lines: Vec<String>) -> Result<HashMap<String, Function>, String> {
+fn build(lines: Vec<String>) -> Result<Vec<Function<usize>>, String> {
     let mut functions = vec![];
+    let mut main_idx = 0;
 
+    // First pass
     for line in lines {
         if line.len() == 0 || line.starts_with("#") {
             continue;
         } else if line.starts_with(".F") {
-            functions.push(try!(parse_fn(line)));
+            let f = try!(parse_fn(line));
+            if f.name.as_str() == "main" {
+                main_idx = functions.len();
+            }
+            functions.push(f);
         } else if line.starts_with("!") {
             if let Some(mut f) = functions.last_mut() {
                 let name = line.trim_left_matches("!").to_owned();
                 let location = f.commands.len();
                 f.names.insert(name, location);
+            } else {
+                return parse_err("command outside function?");
             }
         } else {
             if let Some(mut f) = functions.last_mut() {
                 let command = try!(parse_command(line));
                 // TODO: check for local var frame size?
                 f.commands.push(command);
+            } else {
+                return parse_err("command outside function?");
             }
         }
     }
 
-    Ok(functions.into_iter().map(|f| (f.name.clone(), f)).collect())
+    // Make sure main always appears at index 0
+    functions.swap(0, main_idx);
+
+    // Second pass
+    let func_names: HashMap<String, usize> = functions.iter()
+        .enumerate()
+        .map(|(i, f)| (f.name.clone(), i))
+        .collect();
+    let out = functions.iter()
+        .map(|f| {
+            let commands: Vec<Command<usize>> = f.commands
+                .iter()
+                .map(|cmd| {
+                    match cmd.clone() {
+                        Command::Jump(label) => Command::Jump(*f.names.get(&label).unwrap()),
+                        Command::JIf(label) => Command::JIf(*f.names.get(&label).unwrap()),
+                        Command::Call(name) => Command::Call(*func_names.get(&name).unwrap()),
+                        // leave the rest alone
+                        Command::Noop => Command::Noop,
+                        Command::Push(v) => Command::Push(v),
+                        Command::Pop => Command::Pop,
+                        Command::Dup => Command::Dup,
+                        Command::DupN(n) => Command::DupN(n),
+                        Command::Plus => Command::Plus,
+                        Command::Minus => Command::Minus,
+                        Command::Times => Command::Times,
+                        Command::Divide => Command::Divide,
+                        Command::Mod => Command::Mod,
+                        Command::Eq => Command::Eq,
+                        Command::Neq => Command::Neq,
+                        Command::Gt => Command::Gt,
+                        Command::Gte => Command::Gte,
+                        Command::Lt => Command::Lt,
+                        Command::Lte => Command::Lte,
+                        Command::Print => Command::Print,
+                        Command::MkType => Command::MkType,
+                        Command::New => Command::New,
+                        Command::GetRef => Command::GetRef,
+                        Command::SetRef => Command::SetRef,
+                        Command::Return => Command::Return,
+                        Command::SysGC => Command::SysGC,
+                        Command::SysMemstats => Command::SysMemstats,
+                    }
+                })
+                .collect();
+
+            Function {
+                name: f.name.clone(),
+                commands: commands,
+                names: f.names.clone(),
+                n_args: f.n_args,
+                n_locals: f.n_locals,
+            }
+        })
+        .collect();
+
+    Ok(out)
 }
 
 enum MathOp {
@@ -291,29 +357,30 @@ fn default_value(t: &String) -> Value {
 struct Frame {
     stack: Vec<Value>,
     locals: Vec<Value>,
-    prev_fn_name: String,
+    prev_fn: usize,
     prev_pc: usize,
 }
 
-fn new_frame(prev_pc: usize, prev_fn_name: String) -> Frame {
+fn new_frame(prev_pc: usize, prev_fn: usize) -> Frame {
     Frame {
         stack: vec![],
         locals: vec![],
         prev_pc: prev_pc,
-        prev_fn_name: prev_fn_name,
+        prev_fn: prev_fn,
     }
 }
 
-fn interpret(functions: HashMap<String, Function>) {
+fn interpret(functions: Vec<Function<usize>>) {
     let mut types = vec![];
 
     let mut stack: Vec<Frame> = vec![];
-    let mut frame = new_frame(0, "_init_".to_owned());
+    let mut frame = new_frame(0, 99999999);
 
     let mut heap: HashMap<i64, Vec<Value>> = HashMap::new();
     let mut next_obj_id = 1;
 
-    let mut f = functions.get(&"main".to_owned()).unwrap();
+    let mut fn_number = 0;
+    let mut f = &functions[fn_number];
     let mut pc = 0;
     while pc < f.commands.len() {
         let cmd = &f.commands[pc];
@@ -369,12 +436,10 @@ fn interpret(functions: HashMap<String, Function>) {
             Command::Lte => {
                 compare(&mut frame.stack, Comp::Lte);
             }
-            Command::Jump(ref label) => {
-                pc = *f.names.get(label).unwrap();
-            }
-            Command::JIf(ref label) => {
+            Command::Jump(ref location) => pc = *location,
+            Command::JIf(ref location) => {
                 if frame.stack.pop().unwrap().must_bool() {
-                    pc = *f.names.get(label).unwrap();
+                    pc = *location
                 }
             }
             Command::Print => {
@@ -412,9 +477,9 @@ fn interpret(functions: HashMap<String, Function>) {
                 let (_, val_id) = frame.stack.pop().unwrap().must_ref();
                 heap.get_mut(&val_id).unwrap()[field as usize] = value;
             }
-            Command::Call(ref fn_name) => {
-                let called_f = functions.get(fn_name).unwrap();
-                let mut next_frame = new_frame(pc, f.name.clone());
+            Command::Call(ref fn_no) => {
+                let called_f = &functions[*fn_no];
+                let mut next_frame = new_frame(pc, fn_number);
 
                 for _ in 0..called_f.n_args {
                     next_frame.stack.push(frame.stack.pop().unwrap());
@@ -425,13 +490,14 @@ fn interpret(functions: HashMap<String, Function>) {
                 stack.push(frame);
                 frame = next_frame;
                 f = called_f;
+                fn_number = *fn_no;
                 pc = 0;
             }
             Command::Return => {
                 let return_val = frame.stack.pop().unwrap();
 
                 pc = frame.prev_pc;
-                f = functions.get(&frame.prev_fn_name).unwrap();
+                f = &functions[frame.prev_fn];
                 frame = stack.pop().unwrap();
 
                 frame.stack.push(return_val);
