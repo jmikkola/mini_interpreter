@@ -507,9 +507,11 @@ fn interpret(functions: Vec<Function<usize>>) {
                 let mut to_traverse = VecDeque::new();
 
                 // Collect object roots from the frame.stack
-                for item in frame.stack.iter() {
-                    if let Value::R(_, v) = *item {
-                        to_traverse.push_back(v);
+                for frame in stack.iter() {
+                    for item in frame.stack.iter() {
+                        if let Value::R(_, v) = *item {
+                            to_traverse.push_back(v);
+                        }
                     }
                 }
 
