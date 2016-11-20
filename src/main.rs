@@ -4,91 +4,55 @@ use std::collections::VecDeque;
 use std::io::{stdin, BufReader, BufRead};
 
 #[derive(PartialEq, Debug, Clone)]
-enum Value {
-    I(i64),
-    F(f64),
-    S(String),
-    C(char),
-    B(bool),
-    R(i64, i64),
-}
-
-impl Value {
-    fn to_str(&self) -> String {
-        match *self {
-            Value::I(ref i) => format!("{}", i),
-            Value::F(ref f) => format!("{}", f),
-            Value::S(ref s) => s.clone(),
-            Value::C(ref c) => format!("{}", c),
-            Value::B(ref b) => format!("{}", b),
-            Value::R(ref t, ref v) => format!("<{}, {}>", t, v),
-        }
-    }
-
-    fn must_string(&self) -> String {
-        match *self {
-            Value::S(ref s) => s.clone(),
-            _ => panic!("not a string"),
-        }
-    }
-
-    fn must_int(&self) -> i64 {
-        match *self {
-            Value::I(ref i) => *i,
-            _ => panic!("not an int"),
-        }
-    }
-
-    fn must_ref(&self) -> (i64, i64) {
-        match *self {
-            Value::R(ref t, ref v) => (*t, *v),
-            _ => panic!("not a reference"),
-        }
-    }
-
-    fn must_bool(&self) -> bool {
-        match *self {
-            Value::B(b) => b,
-            _ => panic!("not a boolean"),
-        }
-    }
-}
-
-#[derive(PartialEq, Debug, Clone)]
-struct Function<T> {
+struct Function {
     name: String,
-    commands: Vec<Command<T>>,
+    commands: Vec<Command>,
     names: HashMap<String, usize>,
     n_args: i32,
-    n_locals: i32,
 }
 
 #[derive(PartialEq, Debug, Clone)]
-enum Command<T> {
+enum Label {
+    Name(String),
+    Offset(usize),
+}
+
+#[derive(PartialEq, Debug, Clone)]
+enum Command {
     Noop,
-    Push(Value),
+    PushInt(i64),
+    PushFloat(f64),
     Pop,
     Dup,
     DupN(usize),
-    Plus,
-    Minus,
-    Times,
-    Divide,
-    Mod,
+    PlusInt,
+    MinusInt,
+    TimesInt,
+    DivideInt,
+    ModInt,
+    PlusFloat,
+    MinusFloat,
+    TimesFloat,
+    DivideFloat,
     Eq,
     Neq,
-    Gt,
-    Gte,
-    Lt,
-    Lte,
-    Jump(T),
-    JIf(T),
-    Print,
+    GtInt,
+    GteInt,
+    LtInt,
+    LteInt,
+    GtFloat,
+    GteFloat,
+    LtFloat,
+    LteFloat,
+    Jump(Label),
+    JIf(Label),
+    PrintInt,
+    PrintFloat,
     MkType,
     New,
     GetRef,
     SetRef,
-    Call(T),
+    Call(Label),
     Return,
     SysGC,
     SysMemstats,
@@ -109,50 +73,54 @@ fn parse_int(s: &str) -> Result<i64, String> {
     s.to_owned().parse().map_err(|_| format!("can't parse {} as int", s))
 }
 
-fn parse_value(parts: &Vec<&str>) -> Result<Value, String> {
-    if parts.len() <= 2 {
-        return parse_err("push stmt too short");
-    }
-    match parts[1] {
-        "int" => Ok(Value::I(parts[2].to_owned().parse().unwrap())),
-        "float" => Ok(Value::F(parts[2].to_owned().parse().unwrap())),
-        "string" => Ok(Value::S(parts[2].to_owned())),
-        "char" => Ok(Value::C(parts[2].chars().next().unwrap())),
-        "bool" => Ok(Value::B(parts[2].to_owned().parse().unwrap())),
-        _ => parse_err("invalid value"),
-    }
+fn parse_float(s: &str) -> Result<f64, String> {
+    s.to_owned().parse().map_err(|_| format!("can't parse {} as float", s))
 }
 
-fn parse_command(line: String) -> Result<Command<String>, String> {
+fn to_label(s: &str) -> Label {
+    Label::Name(s.to_owned())
+}
+
+fn parse_command(line: String) -> Result<Command, String> {
     let parts: Vec<&str> = line.split_whitespace().collect();
     if parts.len() < 1 {
         return parse_err("empty command?");
     }
     match parts[0] {
         "noop" => Ok(Command::Noop),
-        "push" => Ok(Command::Push(try!(parse_value(&parts)))),
+        "push-int" => Ok(Command::PushInt(try!(parse_int(parts[1])))),
+        "push-float" => Ok(Command::PushFloat(try!(parse_float(parts[1])))),
         "pop" => Ok(Command::Pop),
         "dup" => Ok(Command::Dup),
         "dup_n" => Ok(Command::DupN(try!(parse_int(parts[1])) as usize)),
-        "plus" => Ok(Command::Plus),
-        "minus" => Ok(Command::Minus),
-        "times" => Ok(Command::Times),
-        "divide" => Ok(Command::Divide),
-        "mod" => Ok(Command::Mod),
+        "plus-int" => Ok(Command::PlusInt),
+        "minus-int" => Ok(Command::MinusInt),
+        "times-int" => Ok(Command::TimesInt),
+        "divide-int" => Ok(Command::DivideInt),
+        "mod-int" => Ok(Command::ModInt),
+        "plus-float" => Ok(Command::PlusFloat),
+        "minus-float" => Ok(Command::MinusFloat),
+        "times-float" => Ok(Command::TimesFloat),
+        "divide-float" => Ok(Command::DivideFloat),
         "eq" => Ok(Command::Eq),
         "neq" => Ok(Command::Neq),
-        "gt" => Ok(Command::Gt),
-        "gte" => Ok(Command::Gte),
-        "lt" => Ok(Command::Lt),
-        "lte" => Ok(Command::Lte),
-        "jump" => Ok(Command::Jump(parts[1].to_owned())),
-        "jif" => Ok(Command::JIf(parts[1].to_owned())),
-        "print" => Ok(Command::Print),
+        "gt-int" => Ok(Command::GtInt),
+        "gte-int" => Ok(Command::GteInt),
+        "lt-int" => Ok(Command::LtInt),
+        "lte-int" => Ok(Command::LteInt),
+        "gt-float" => Ok(Command::GtFloat),
+        "gte-float" => Ok(Command::GteFloat),
+        "lt-float" => Ok(Command::LtFloat),
+        "lte-float" => Ok(Command::LteFloat),
+        "jump" => Ok(Command::Jump(to_label(parts[1]))),
+        "jif" => Ok(Command::JIf(to_label(parts[1]))),
+        "print-int" => Ok(Command::PrintInt),
+        "print-float" => Ok(Command::PrintFloat),
         "mktype" => Ok(Command::MkType),
         "new" => Ok(Command::New),
         "getref" => Ok(Command::GetRef),
         "setref" => Ok(Command::SetRef),
-        "call" => Ok(Command::Call(parts[1].to_owned())),
+        "call" => Ok(Command::Call(to_label(parts[1]))),
         "return" => Ok(Command::Return),
         "sysgc" => Ok(Command::SysGC),
         "sysmemstats" => Ok(Command::SysMemstats),
@@ -160,7 +128,7 @@ fn parse_command(line: String) -> Result<Command<String>, String> {
     }
 }
 
-fn parse_fn(line: String) -> Result<Function<String>, String> {
+fn parse_fn(line: String) -> Result<Function, String> {
     let parts: Vec<&str> = line.split_whitespace().collect();
     if parts.len() != 3 {
         return parse_err("invalid function def");
@@ -170,12 +138,11 @@ fn parse_fn(line: String) -> Result<Function<String>, String> {
         name: parts[1].to_owned(),
         commands: Vec::new(),
         names: HashMap::new(),
-        n_locals: 0, // TODO?
         n_args: try!(parts[2].parse().map_err(|_| "can't parse int")),
     })
 }
 
-fn build(lines: Vec<String>) -> Result<Vec<Function<usize>>, String> {
+fn build_with_string_labels(lines: Vec<String>) -> Result<Vec<Function>, String> {
     let mut functions = vec![];
     let mut main_idx = 0;
 
@@ -211,152 +178,71 @@ fn build(lines: Vec<String>) -> Result<Vec<Function<usize>>, String> {
     // Make sure main always appears at index 0
     functions.swap(0, main_idx);
 
-    // Second pass
-    let func_names: HashMap<String, usize> = functions.iter()
+    Ok(functions)
+}
+
+fn collect_fn_names(functions: &Vec<Function>) -> HashMap<String, usize> {
+    functions.iter()
         .enumerate()
         .map(|(i, f)| (f.name.clone(), i))
-        .collect();
-    let out = functions.iter()
-        .map(|f| {
-            let commands: Vec<Command<usize>> = f.commands
-                .iter()
-                .map(|cmd| {
-                    match cmd.clone() {
-                        Command::Jump(label) => Command::Jump(*f.names.get(&label).unwrap()),
-                        Command::JIf(label) => Command::JIf(*f.names.get(&label).unwrap()),
-                        Command::Call(name) => Command::Call(*func_names.get(&name).unwrap()),
-                        // leave the rest alone
-                        Command::Noop => Command::Noop,
-                        Command::Push(v) => Command::Push(v),
-                        Command::Pop => Command::Pop,
-                        Command::Dup => Command::Dup,
-                        Command::DupN(n) => Command::DupN(n),
-                        Command::Plus => Command::Plus,
-                        Command::Minus => Command::Minus,
-                        Command::Times => Command::Times,
-                        Command::Divide => Command::Divide,
-                        Command::Mod => Command::Mod,
-                        Command::Eq => Command::Eq,
-                        Command::Neq => Command::Neq,
-                        Command::Gt => Command::Gt,
-                        Command::Gte => Command::Gte,
-                        Command::Lt => Command::Lt,
-                        Command::Lte => Command::Lte,
-                        Command::Print => Command::Print,
-                        Command::MkType => Command::MkType,
-                        Command::New => Command::New,
-                        Command::GetRef => Command::GetRef,
-                        Command::SetRef => Command::SetRef,
-                        Command::Return => Command::Return,
-                        Command::SysGC => Command::SysGC,
-                        Command::SysMemstats => Command::SysMemstats,
-                    }
-                })
-                .collect();
+        .collect()
+}
 
-            Function {
-                name: f.name.clone(),
-                commands: commands,
-                names: f.names.clone(),
-                n_args: f.n_args,
-                n_locals: f.n_locals,
-            }
-        })
-        .collect();
+fn resolve_labels_func(f: &Function, func_names: &HashMap<String, usize>)
+                       -> Result<Function, String> {
+    let mut commands = vec![];
+    for cmd in f.commands.iter() {
+        commands.push(try!(resolve_labels_command(cmd.clone(), func_names, &f.names)));
+    }
 
+    Ok(Function {
+        name: f.name.clone(),
+        commands: commands,
+        names: f.names.clone(),
+        n_args: f.n_args,
+    })
+}
+
+fn name_to_offset_label(name: &String, names: &HashMap<String, usize>)
+                        -> Result<Label, String> {
+    match names.get(name) {
+        None => Err(format!("label {} not defined", name)),
+        Some(offset) => Ok(Label::Offset(*offset)),
+    }
+}
+
+fn resolve_labels_command(c: Command, func_names: &HashMap<String, usize>, labels: &HashMap<String, usize>)
+                          -> Result<Command, String> {
+    Ok(match c {
+        Command::Jump(Label::Name(name)) =>
+            Command::Jump(try!(name_to_offset_label(&name, labels))),
+        Command::JIf(Label::Name(name)) =>
+            Command::JIf(try!(name_to_offset_label(&name, labels))),
+        Command::Call(Label::Name(name)) =>
+            Command::Call(try!(name_to_offset_label(&name, func_names))),
+        _ => c,
+    })
+}
+
+fn string_labels_to_offsets(functions: Vec<Function>) -> Result<Vec<Function>, String> {
+    let func_names = collect_fn_names(&functions);
+
+    let mut out = vec![];
+    for f in functions.iter() {
+        out.push(try!(resolve_labels_func(f, &func_names)));
+    }
     Ok(out)
 }
 
-enum MathOp {
-    Plus,
-    Minus,
-    Times,
-    Divide,
-    Mod,
-}
-
-fn math(stack: &mut Vec<Value>, op: MathOp) {
-    let right = stack.pop().unwrap();
-    let left = stack.pop().unwrap();
-    let result = match (left, right) {
-        (Value::I(l), Value::I(r)) => {
-            match op {
-                MathOp::Plus => Value::I(l + r),
-                MathOp::Minus => Value::I(l - r),
-                MathOp::Times => Value::I(l * r),
-                MathOp::Divide => Value::I(l / r),
-                MathOp::Mod => Value::I(l % r),
-            }
-        }
-        (Value::F(l), Value::F(r)) => {
-            match op {
-                MathOp::Plus => Value::F(l + r),
-                MathOp::Minus => Value::F(l - r),
-                MathOp::Times => Value::F(l * r),
-                MathOp::Divide => Value::F(l / r),
-                MathOp::Mod => Value::F(l % r),
-            }
-        }
-        _ => panic!("can't apply math operators"),
-    };
-    stack.push(result);
-}
-
-fn compare_equality(stack: &mut Vec<Value>, is_eq: bool) {
-    let right = stack.pop().unwrap();
-    let left = stack.pop().unwrap();
-    stack.push(Value::B(is_eq == (left == right)));
-}
-
-#[derive(PartialEq, Debug)]
-enum Comp {
-    Gt,
-    Gte,
-    Lt,
-    Lte,
-}
-
-fn compare(stack: &mut Vec<Value>, comp: Comp) {
-    let right = stack.pop().unwrap();
-    let left = stack.pop().unwrap();
-    let result = match (left, right) {
-        (Value::I(l), Value::I(r)) => {
-            match comp {
-                Comp::Gt => l > r,
-                Comp::Gte => l >= r,
-                Comp::Lt => l < r,
-                Comp::Lte => l <= r,
-            }
-        }
-        (Value::F(l), Value::F(r)) => {
-            match comp {
-                Comp::Gt => l > r,
-                Comp::Gte => l >= r,
-                Comp::Lt => l < r,
-                Comp::Lte => l <= r,
-            }
-        }
-        _ => panic!("can't apply comparison operator"),
-    };
-    stack.push(Value::B(result));
-}
-
-fn default_value(t: &String) -> Value {
-    match t.as_ref() {
-        "int" => Value::I(0),
-        "float" => Value::F(0.),
-        "string" => Value::S(String::new()),
-        "char" => Value::C('\0'),
-        "bool" => Value::B(false),
-        "ref" => Value::R(0, 0),
-        _ => panic!("invalid type"),
-    }
+fn build(lines: Vec<String>) -> Result<Vec<Function>, String> {
+    let functions = try!(build_with_string_labels(lines));
+    string_labels_to_offsets(functions)
 }
 
 #[derive(Debug)]
 struct Frame {
-    stack: Vec<Value>,
-    locals: Vec<Value>,
+    stack: Vec<i64>,
+    locals: Vec<i64>,
     prev_fn: usize,
     prev_pc: usize,
 }
@@ -370,13 +256,56 @@ fn new_frame(prev_pc: usize, prev_fn: usize) -> Frame {
     }
 }
 
-fn interpret(functions: Vec<Function<usize>>) {
+#[inline(always)]
+fn f2i(f: f64) -> i64 {
+    unsafe {
+        return std::mem::transmute(f);
+    }
+}
+
+#[inline(always)]
+fn i2f(i: i64) -> f64 {
+    unsafe {
+        return std::mem::transmute(i);
+    }
+}
+
+#[inline(always)]
+fn binary_int_op<F>(stack: &mut Vec<i64>, f: F)
+    where F: Fn(i64, i64) -> i64 {
+    let right = stack.pop().unwrap();
+    let left = stack.pop().unwrap();
+    stack.push(f(left, right));
+}
+
+#[inline(always)]
+fn binary_float_op<F>(stack: &mut Vec<i64>, f: F)
+    where F: Fn(f64, f64) -> f64 {
+    let right = i2f(stack.pop().unwrap());
+    let left = i2f(stack.pop().unwrap());
+    stack.push(f2i(f(left, right)));
+}
+
+#[inline(always)]
+fn binary_float_to_int_op<F>(stack: &mut Vec<i64>, f: F)
+    where F: Fn(f64, f64) -> i64 {
+    let right = i2f(stack.pop().unwrap());
+    let left = i2f(stack.pop().unwrap());
+    stack.push(f(left, right));
+}
+
+#[inline(always)]
+fn bool_to_i64(b: bool) -> i64 {
+    if b { 1 } else { 0 }
+}
+
+fn interpret(functions: Vec<Function>) {
     let mut types = vec![];
 
     let mut stack: Vec<Frame> = vec![];
     let mut frame = new_frame(0, 99999999);
 
-    let mut heap: HashMap<i64, Vec<Value>> = HashMap::new();
+    let mut heap: HashMap<i64, Vec<i64>> = HashMap::new();
     let mut next_obj_id = 1;
 
     let mut fn_number = 0;
@@ -388,8 +317,11 @@ fn interpret(functions: Vec<Function<usize>>) {
 
         match *cmd {
             Command::Noop => {}
-            Command::Push(ref v) => {
-                frame.stack.push(v.clone());
+            Command::PushInt(i) => {
+                frame.stack.push(i);
+            }
+            Command::PushFloat(f) => {
+                frame.stack.push(f2i(f));
             }
             Command::Pop => {
                 frame.stack.pop();
@@ -403,82 +335,116 @@ fn interpret(functions: Vec<Function<usize>>) {
                 let val = frame.stack[len - n - 1].clone();
                 frame.stack.push(val);
             }
-            Command::Plus => {
-                math(&mut frame.stack, MathOp::Plus);
+            Command::PlusInt => {
+                binary_int_op(&mut frame.stack, |a, b| { a + b });
             }
-            Command::Minus => {
-                math(&mut frame.stack, MathOp::Minus);
+            Command::MinusInt => {
+                binary_int_op(&mut frame.stack, |a, b| { a - b });
             }
-            Command::Times => {
-                math(&mut frame.stack, MathOp::Times);
+            Command::TimesInt => {
+                binary_int_op(&mut frame.stack, |a, b| { a * b });
             }
-            Command::Divide => {
-                math(&mut frame.stack, MathOp::Divide);
+            Command::DivideInt => {
+                binary_int_op(&mut frame.stack, |a, b| { a / b });
             }
-            Command::Mod => {
-                math(&mut frame.stack, MathOp::Mod);
+            Command::ModInt => {
+                binary_int_op(&mut frame.stack, |a, b| { a % b });
+            }
+            Command::PlusFloat => {
+                binary_float_op(&mut frame.stack, |a, b| { a + b });
+            }
+            Command::MinusFloat => {
+                binary_float_op(&mut frame.stack, |a, b| { a - b });
+            }
+            Command::TimesFloat => {
+                binary_float_op(&mut frame.stack, |a, b| { a * b });
+            }
+            Command::DivideFloat => {
+                binary_float_op(&mut frame.stack, |a, b| { a / b });
             }
             Command::Eq => {
-                compare_equality(&mut frame.stack, true);
+                binary_int_op(&mut frame.stack, |a, b| { bool_to_i64(a == b) });
             }
             Command::Neq => {
-                compare_equality(&mut frame.stack, false);
+                binary_int_op(&mut frame.stack, |a, b| { bool_to_i64(a != b) });
             }
-            Command::Gt => {
-                compare(&mut frame.stack, Comp::Gt);
+            Command::GtInt => {
+                binary_int_op(&mut frame.stack, |a, b| { bool_to_i64(a > b) });
             }
-            Command::Gte => {
-                compare(&mut frame.stack, Comp::Gte);
+            Command::GteInt => {
+                binary_int_op(&mut frame.stack, |a, b| { bool_to_i64(a >= b) });
             }
-            Command::Lt => {
-                compare(&mut frame.stack, Comp::Lt);
+            Command::LtInt => {
+                binary_int_op(&mut frame.stack, |a, b| { bool_to_i64(a < b) });
             }
-            Command::Lte => {
-                compare(&mut frame.stack, Comp::Lte);
+            Command::LteInt => {
+                binary_int_op(&mut frame.stack, |a, b| { bool_to_i64(a <= b) });
             }
-            Command::Jump(ref location) => pc = *location,
-            Command::JIf(ref location) => {
-                if frame.stack.pop().unwrap().must_bool() {
-                    pc = *location
+            Command::GtFloat => {
+                binary_float_to_int_op(&mut frame.stack, |a, b| { bool_to_i64(a > b) });
+            }
+            Command::GteFloat => {
+                binary_float_to_int_op(&mut frame.stack, |a, b| { bool_to_i64(a >= b) });
+            }
+            Command::LtFloat => {
+                binary_float_to_int_op(&mut frame.stack, |a, b| { bool_to_i64(a < b) });
+            }
+            Command::LteFloat => {
+                binary_float_to_int_op(&mut frame.stack, |a, b| { bool_to_i64(a <= b) });
+            }
+            Command::Jump(Label::Offset(offset)) => pc = offset,
+            Command::Jump(Label::Name(ref n)) => {
+                panic!("unexpected name {} left in jump command", n);
+            }
+            Command::JIf(Label::Offset(offset)) => {
+                if frame.stack.pop().unwrap() != 0 {
+                    pc = offset
                 }
             }
-            Command::Print => {
+            Command::JIf(Label::Name(ref n)) => {
+                panic!("unexpected name {} left in jif command", n);
+            }
+            Command::PrintInt => {
                 let top_val = frame.stack.pop().unwrap();
-                println!("{}", top_val.to_str());
+                println!("{}", top_val);
+            }
+            Command::PrintFloat => {
+                let top_val = frame.stack.pop().unwrap();
+                println!("{}", i2f(top_val));
             }
             Command::MkType => {
-                let name = frame.stack.pop().unwrap().must_string();
-                let n_fields = frame.stack.pop().unwrap().must_int();
+                let name = frame.stack.pop().unwrap();
+                let n_fields = frame.stack.pop().unwrap();
                 let mut fields = vec![];
                 for _ in 0..n_fields {
-                    fields.push(frame.stack.pop().unwrap().must_string());
+                    fields.push(frame.stack.pop().unwrap());
                 }
 
                 types.push((name, fields));
-                frame.stack.push(Value::I((types.len() - 1) as i64));
+                frame.stack.push((types.len() - 1) as i64);
             }
             Command::New => {
-                let type_id = frame.stack.pop().unwrap().must_int();
+                let type_id = frame.stack.pop().unwrap();
                 let t = &types[type_id as usize];
                 let val_id = next_obj_id;
                 next_obj_id += 1;
 
-                heap.insert(val_id, t.1.iter().map(default_value).collect());
-                frame.stack.push(Value::R(type_id, val_id));
+                heap.insert(val_id, t.1.iter().map(|_| { 0 }).collect());
+                frame.stack.push(val_id as i64);
             }
             Command::GetRef => {
-                let field = frame.stack.pop().unwrap().must_int();
-                let (_, val_id) = frame.stack.pop().unwrap().must_ref();
+                let field = frame.stack.pop().unwrap();
+                let val_id = frame.stack.pop().unwrap();
                 frame.stack.push(heap[&val_id][field as usize].clone());
             }
             Command::SetRef => {
                 let value = frame.stack.pop().unwrap();
-                let field = frame.stack.pop().unwrap().must_int();
-                let (_, val_id) = frame.stack.pop().unwrap().must_ref();
+                let field = frame.stack.pop().unwrap();
+                let val_id = frame.stack.pop().unwrap();
                 heap.get_mut(&val_id).unwrap()[field as usize] = value;
             }
-            Command::Call(ref fn_no) => {
-                let called_f = &functions[*fn_no];
+            Command::Call(Label::Offset(fn_no)) => {
+                let called_f = &functions[fn_no];
                 let mut next_frame = new_frame(pc, fn_number);
 
                 for _ in 0..called_f.n_args {
@@ -490,8 +456,11 @@ fn interpret(functions: Vec<Function<usize>>) {
                 stack.push(frame);
                 frame = next_frame;
                 f = called_f;
-                fn_number = *fn_no;
+                fn_number = fn_no;
                 pc = 0;
+            }
+            Command::Call(Label::Name(ref n)) => {
+                panic!("unexpected name {} left in call command", n);
             }
             Command::Return => {
                 let return_val = frame.stack.pop().unwrap();
@@ -509,9 +478,12 @@ fn interpret(functions: Vec<Function<usize>>) {
                 // Collect object roots from the frame.stack
                 for frame in stack.iter() {
                     for item in frame.stack.iter() {
+                        // Shoot, does this need stackmaps?
+                        /*
                         if let Value::R(_, v) = *item {
                             to_traverse.push_back(v);
                         }
+                         */
                     }
                 }
 
@@ -522,9 +494,11 @@ fn interpret(functions: Vec<Function<usize>>) {
                         if let Some(value) = heap.get(&v) {
                             live_refs.insert(v);
                             for field in value {
+                                /*
                                 if let Value::R(_, v2) = *field {
                                     to_traverse.push_back(v2);
                                 }
+                                 */
                             }
                         }
                     }

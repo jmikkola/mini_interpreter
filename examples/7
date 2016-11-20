@@ -1,27 +1,27 @@
 .F slow-fib 1
 dup
-push int 2
-lt int
+push-int 2
+lt-int
 jif ret1
 dup
 
-push int 1
-minus int
+push-int 1
+minus-int
 call slow-fib
 
 dup_n 1
-push int 2
-minus int
+push-int 2
+minus-int
 call slow-fib
 
-plus int
+plus-int
 return
 
 !ret1
-push int 1
+push-int 1
 return
 
 .F main 0
-push int 35
+push-int 35
 call slow-fib
-print
+print-int

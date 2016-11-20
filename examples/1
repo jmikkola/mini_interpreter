@@ -1,9 +1,9 @@
 .F main 0
-push float 9.0
-push float 3.0
-minus float
-push float 2.0
-push float 5.0
-plus float
-times float
-print float
+push-float 9.0
+push-float 3.0
+minus-float
+push-float 2.0
+push-float 5.0
+plus-float
+times-float
+print-float

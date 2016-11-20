@@ -1,10 +1,10 @@
 .F print2 2
-print float
-print int
-push int 0
+print-float
+print-int
+push-int 0
 return
 
 .F main 0
-push int 123
-push float 345.12
+push-int 123
+push-float 345.12
 call print2

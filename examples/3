@@ -1,9 +1,9 @@
 .F f1 1
 dup
-plus int
+plus-int
 return
 
 .F main 0
-push int 123
+push-int 123
 call f1
 print
