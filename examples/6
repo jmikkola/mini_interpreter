@@ -1,6 +1,6 @@
 .F print2 2
-print
-print
+print float
+print int
 push int 0
 return
 

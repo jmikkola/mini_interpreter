@@ -1,20 +1,20 @@
 .F slow-fib 1
 dup
 push int 2
-lt
+lt int
 jif ret1
 dup
 
 push int 1
-minus
+minus int
 call slow-fib
 
 dup_n 1
 push int 2
-minus
+minus int
 call slow-fib
 
-plus
+plus int
 return
 
 !ret1

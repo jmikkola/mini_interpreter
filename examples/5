@@ -8,6 +8,6 @@ jif end
 dup
 print
 push int 1
-minus
+minus int
 jump top
 !end

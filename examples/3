@@ -1,6 +1,6 @@
 .F f1 1
 dup
-plus
+plus int
 return
 
 .F main 0
